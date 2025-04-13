@@ -1,0 +1,93 @@
+version: '3.8'
+
+services:
+  sensor1:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    ports:
+      - "5000:5000"    # TCP
+      - "7001:7001"    # gRPC
+    command: [
+      "python", "src/main.py", "sensor",
+      "--sensor_id", "1",
+      "--host", "0.0.0.0",
+      "--tcp_port", "5000",
+      "--grpc_port", "7001",
+      "--multicast_group", "239.0.0.1",
+      "--monitor_host", "monitor"
+    ]
+    volumes:
+      - cloud_data:/app/cloud
+
+  sensor2:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    ports:
+      - "5001:5001"
+      - "7002:7002"
+    command: [
+      "python", "src/main.py", "sensor",
+      "--sensor_id", "2",
+      "--host", "0.0.0.0",
+      "--tcp_port", "5001",
+      "--grpc_port", "7002",
+      "--multicast_group", "239.0.0.1",
+      "--monitor_host", "monitor"
+    ]
+    volumes:
+      - cloud_data:/app/cloud
+
+  sensor3:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    ports:
+      - "5002:5002"
+      - "7003:7003"
+    command: [
+      "python", "src/main.py", "sensor",
+      "--sensor_id", "3",
+      "--host", "0.0.0.0",
+      "--tcp_port", "5002",
+      "--grpc_port", "7003",
+      "--multicast_group", "239.0.0.1",
+      "--monitor_host", "monitor"
+    ]
+    volumes:
+      - cloud_data:/app/cloud
+
+  monitor:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    ports:
+      - "6000:6000"
+    command: [
+      "python", "src/main.py", "monitor",
+      "--host", "0.0.0.0",
+      "--tcp_port", "6000",
+      "--multicast_group", "239.0.0.1"
+    ]
+
+  client:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    command: [
+      "python", "src/main.py", "client",
+      "--host", "sensor1",
+      "--port", "5000"
+    ]
+
+  cloud:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    volumes:
+      - cloud_data:/app/cloud
+    command: ["python", "src/main.py", "cloud"]
+
+volumes:
+  cloud_data:
