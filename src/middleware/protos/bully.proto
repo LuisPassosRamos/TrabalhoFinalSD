@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package bully;
+
+// Mensagem usada para iniciar uma eleição
+message ElectionRequest {
+  string sensor_id = 1;
+}
+
+// Resposta para a mensagem de eleição, geralmente "OK"
+message ElectionResponse {
+  bool ok = 1;
+  string message = 2;
+}
+
+// Mensagem usada para anunciar o coordenador
+message CoordinatorNotification {
+  string coordinator_id = 1;
+}
+
+// Serviço Bully para comunicação entre sensores
+service BullyService {
+  // Método para iniciar a eleição
+  rpc StartElection(ElectionRequest) returns (ElectionResponse);
+  
+  // Método para anunciar o coordenador
+  rpc AnnounceCoordinator(CoordinatorNotification) returns (ElectionResponse);
+}
