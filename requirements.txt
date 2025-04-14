@@ -1,5 +1,2 @@
-Pyro4
 grpcio
 grpcio-tools
-protobuf
-cryptography

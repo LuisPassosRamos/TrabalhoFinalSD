@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package monitor;
+
+// Mensagem de status enviada pelo sensor
+message Status {
+  string sensor_id = 1;
+  string status = 2;      // Ex: "Operando normalmente"
+  int64 timestamp = 3;    // Timestamp (epoch em segundos)
+}
+
+// Mensagem de resposta (acknowledgement)
+message Ack {
+  string mensagem = 1;
+}
+
+// Definição do serviço: MonitorService
+service MonitorService {
+  // Método para envio de status via gRPC
+  rpc SendStatus(Status) returns (Ack);
+}

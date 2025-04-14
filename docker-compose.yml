@@ -1,0 +1,38 @@
+version: "3.8"
+services:
+  sensor1:
+    build: .
+    container_name: sensor1
+    command: ["python", "-u", "src/sensor/sensor.py", "5000"]
+    ports:
+      - "5000:5000"
+
+  sensor2:
+    build: .
+    container_name: sensor2
+    command: ["python", "-u", "src/sensor/sensor.py", "5001"]
+    ports:
+      - "5001:5001"
+
+  sensor3:
+    build: .
+    container_name: sensor3
+    command: ["python", "-u", "src/sensor/sensor.py", "5002"]
+    ports:
+      - "5002:5002"
+
+  client:
+    build: .
+    container_name: client
+    command: ["python", "-u", "src/client/client.py"]
+    depends_on:
+      - sensor1
+      - sensor2
+      - sensor3
+
+  monitor:
+    build: .
+    container_name: monitor
+    command: ["python", "-u", "src/middleware/monitor_server.py"]
+    ports:
+      - "50051:50051"
