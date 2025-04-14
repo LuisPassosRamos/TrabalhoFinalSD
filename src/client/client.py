@@ -1,21 +1,56 @@
 # src\client\client.py
-
 import socket
 import threading
 import time
 
-def enviar_heartbeat():
-    # TODO: Implementar o envio de heartbeat para o servidor enviar mensagens com o status do sensor para o monitor via gRPC
-    pass
+# Inicializa o relógio de Lamport e um lock para ele
+relogio_de_lamport = 0
+relogio_lock = threading.Lock()
+
+def atualizar_relogio_de_lamport(timestamp_recebido):
+    """Atualiza o relógio de Lamport com base no timestamp recebido."""
+    global relogio_de_lamport
+    with relogio_lock:
+        relogio_de_lamport = max(relogio_de_lamport, timestamp_recebido) + 1
+        print(f"[Cliente] Atualizado relógio de Lamport: {relogio_de_lamport}")
+
+def incrementa_relogio_de_lamport():
+    """Incrementa o relógio de Lamport se não houver timestamp recebido."""
+    global relogio_de_lamport
+    with relogio_lock:
+        relogio_de_lamport += 1
+        print(f"[Cliente] Relógio de Lamport incrementado: {relogio_de_lamport}")
 
 def receber_dados(s, host, porta):
-    """Recebe dados do sensor enquanto a conexão estiver ativa."""
+    """Recebe dados do sensor enquanto a conexão estiver ativa.
+       Espera que os dados sejam enviados no formato: <dados>|<timestamp>
+    """
     try:
         while True:
             dados = s.recv(1024)
             if not dados:
                 break
-            print(f"[Cliente] Dados recebidos de {host}:{porta} -> {dados.decode()}")
+            mensagem = dados.decode()
+            # Supondo que o sensor envia uma string no formato "valor1,valor2,valor3|timestamp"
+            partes = mensagem.split("|")
+            if len(partes) == 2:
+                dados_climaticos = partes[0]
+                try:
+                    sensor_timestamp = int(partes[1])
+                except ValueError:
+                    sensor_timestamp = None
+            else:
+                dados_climaticos = mensagem
+                sensor_timestamp = None
+
+            print(f"[Cliente] Dados recebidos de {host}:{porta} -> {dados_climaticos}")
+            
+            # Se o sensor enviou um timestamp, utiliza-o para atualizar o relógio de Lamport
+            if sensor_timestamp is not None:
+                atualizar_relogio_de_lamport(sensor_timestamp)
+            else:
+                # Se não houver timestamp, apenas incrementa o relógio
+                incrementa_relogio_de_lamport()
     except Exception as e:
         print(f"[Cliente] Erro ao receber dados de {host}:{porta}: {e}")
 
