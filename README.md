@@ -28,7 +28,6 @@ O sistema é composto por:
 - **Cloud:**  
   Responsável pela replicação dos dados e armazenamento dos checkpoints, simulando a consistência eventual e a recuperação de falhas. Pode ser implementado para demonstrar a replicação dos dados em arquivos JSON.
 
-
 ---
 
 ## 3. Módulos de Comunicação e Funcionamento
@@ -67,12 +66,11 @@ Implementar uma camada de middleware que permita chamadas de procedimento remoto
     - **Heartbeat:** Cada nó envia periodicamente uma mensagem para o monitor contendo informações básicas, como o identificador do nó, um timestamp e possivelmente um status (por exemplo, "ok"). se caso o monitor não receba a mensagem do coordenador por um determinado período, ele inicia uma eleição.
     - **Sincronização com Clocks Lógicos (Lamport):** Cada sensor mantém um contador lógico; o timestamp é enviado junto com as mensagens e atualizado conforme os eventos ocorram.
     - **Snapshot Global (Chandy-Lamport):** O coordenador atual inicia a captura de estado periodicamente, enviando marcadores aos outros nós e salvando o estado local antes de continuar a comunicação. Os outros nós ao receberem o marcador, inicia a captura de estado também.
-    
-  
+
 - **Cliente Principal:**
   - Atua como orquestrador, invocando os métodos gRPC nos sensores para solicitar o status, iniciar snapshots, verificar heartbeat e disparar eleições conforme necessário.
 
--**Monitor central:**
+- **Monitor central:**
   - Atua como monitor, recebe os heartbeat de cada nó e mostra no log que o heartbeat foi recebido. Caso um nó não responda o heartbeat dentro de um tempo limite, o monitor deve detectá-lo como falho. Nesse caso, se o nó que falhou for o coordenador, inicia-se uma votação Bully.
 
 **Demonstração:**  
@@ -121,7 +119,8 @@ A implementação deve permitir visualizar, por exemplo, o arquivo de checkpoint
 
 ## 4. Integração e Relação Entre as Comunicações
 
-### Relação dos Componentes:
+### Relação dos Componentes
+
 - **Sensores:**  
   Cada sensor atua em três vertentes no mesmo processo/container:
   1. **Servidor TCP:** Para enviar dados climáticos continuamente.
@@ -137,16 +136,16 @@ A implementação deve permitir visualizar, por exemplo, o arquivo de checkpoint
   - O **monitor** pode ser usado para centralizar informações de heartbeat e status dos sensores.
   - O **cloud** armazena dados replicados e checkpoints, possibilitando a recuperação e a consistência eventual entre réplicas.
 
-### Fluxo de Comunicação:
+### Fluxo de Comunicação
 
 1. **Inicialização:**  
    Cada sensor inicia os três serviços (TCP, gRPC e Multicast). O cliente principal se conecta aos sensores via TCP e também se inscreve no grupo multicast.
-   
+
 2. **Operação Normal:**  
    - Os sensores enviam dados via TCP periodicamente.
    - O cliente coleta esses dados e, em paralelo, pode fazer chamadas gRPC para monitorar o estado dos sensores (atualização de clocks, snapshots, heartbeat).
    - Em caso de detecção de condição crítica, um alerta multicast é disparado para notificar todos os nós simultaneamente.
-   
+
 3. **Tolerância a Falhas:**  
    - Os sensores e o cliente registram seus estados periodicamente via checkpoints.
    - Se for detectada uma falha (ex.: não resposta do heartbeat), o algoritmo de eleição é iniciado (Bully ou Anel) para selecionar um novo coordenador.
@@ -170,6 +169,7 @@ A implementação deve permitir visualizar, por exemplo, o arquivo de checkpoint
 ## 6. Fluxo de Demonstração e Critérios de Avaliação
 
 ### Demonstração Prática
+
 1. **Coleta via Sockets:**  
    O cliente conecta-se aos sensores, coletando e exibindo dados climáticos contínuos.
 
@@ -183,6 +183,7 @@ A implementação deve permitir visualizar, por exemplo, o arquivo de checkpoint
    Os dados são replicados e salvos em checkpoints; testes de falha demonstram a recuperação dos estados utilizando o último checkpoint registrado.
 
 ### Critérios de Avaliação
+
 - **Arquitetura e Documentação:** Clareza na definição dos módulos e das relações entre as tecnologias.
 - **Implementação das Comunicações:** Funcionamento adequado dos canais via TCP, gRPC e Multicast, conforme demonstrado pela coleta de dados, gerenciamento e alertas.
 - **Sincronização e Estado Global:** Correta implementação dos clocks lógicos e do algoritmo de snapshot.
@@ -200,9 +201,11 @@ A implementação deve permitir visualizar, por exemplo, o arquivo de checkpoint
 
 2. **Execução via Docker:**  
    Certifique-se de ter o Docker e o Docker Compose instalados. No diretório raiz do projeto, execute:
-   ```
+
+   ```bash
    docker-compose up --build
    ```
+
    Isso iniciará todos os containers, permitindo a demonstração da comunicação e integração entre os nós.
 
 3. **Documentação e Relatório:**  
@@ -212,7 +215,7 @@ A implementação deve permitir visualizar, por exemplo, o arquivo de checkpoint
    - Código-fonte devidamente comentado.
    - Documentação técnica (README.md, relatório).
    - Apresentação (vídeo de demonstração).
-   - Envio via email para: felipe_silva@ifba.edu.br, contendo a identificação do aluno, disciplina e turma.
+   - Envio via email para: <felipe_silva@ifba.edu.br>, contendo a identificação do aluno, disciplina e turma.
 
 ---
 
