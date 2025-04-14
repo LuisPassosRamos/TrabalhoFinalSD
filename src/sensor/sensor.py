@@ -2,6 +2,8 @@
 import socket
 import threading
 import time
+import os
+import json
 import random
 import sys
 import grpc
@@ -11,6 +13,72 @@ from middleware.protos import sensor_status_pb2
 from middleware.protos import sensor_status_pb2_grpc
 from middleware.protos import bully_pb2
 from middleware.protos import bully_pb2_grpc
+
+# Pasta onde os snapshots dos sensores serão armazenados
+SNAPSHOT_DIR = os.path.join(os.path.dirname(__file__), "snapshots")
+if not os.path.exists(SNAPSHOT_DIR):
+    os.makedirs(SNAPSHOT_DIR)
+
+def criar_snapshot_local_sensor():
+    """
+    Cria um snapshot local no sensor.
+    O snapshot inclui:
+      - Identificador do sensor
+      - Timestamp atual
+      - Valor do relógio de Lamport
+    """
+    snapshot = {
+        "id": sensor_id,
+        "timestamp": time.time(),
+        "lamport_clock": relogio_de_lamport
+    }
+    nome_arquivo = os.path.join(SNAPSHOT_DIR, f"snapshot_{sensor_id}_{int(time.time())}.json")
+    with open(nome_arquivo, "w") as f:
+        json.dump(snapshot, f, indent=4)
+    print(f"[Sensor {sensor_id}] Snapshot criado: {nome_arquivo}")
+
+def marker_listener(marker_port):
+    """
+    Inicializa um servidor TCP para ouvir mensagens do marcador vindas do cliente.
+    Quando receber uma mensagem de marcador, incrementa o relógio e cria um snapshot local.
+    """
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.bind(("0.0.0.0", marker_port))
+    server.listen(5)
+    print(f"[Sensor {sensor_id}] Servidor de snapshot iniciado na porta {marker_port}")
+    while True:
+        conn, addr = server.accept()
+        try:
+            data = conn.recv(1024)
+            if data:
+                mensagem = data.decode().strip()
+                # Exemplo de mensagem: "MARKER|<clock>"
+                if mensagem.startswith("MARKER"):
+                    partes = mensagem.split("|")
+                    if len(partes) == 2:
+                        try:
+                            marcador_clock = int(partes[1])
+                        except ValueError:
+                            marcador_clock = None
+                        print(f"[Sensor {sensor_id}] Marcador recebido com clock {marcador_clock}")
+                        # Incrementa o relógio de Lamport ao receber o marcador
+                        incrementa_relogio_de_lamport()
+                        # Cria o snapshot local
+                        criar_snapshot_local_sensor()
+            conn.close()
+        except Exception as e:
+            print(f"[Sensor {sensor_id}] Erro no marker listener: {e}")
+            conn.close()
+
+def inicia_marker_listener(porta_base):
+    """
+    Inicia o marker listener no sensor.
+    Usamos a convenção de que a porta para o listener é (porta_base + 1000)
+    """
+    marker_port = porta_base + 1000
+    t = threading.Thread(target=marker_listener, args=(marker_port,))
+    t.daemon = True
+    t.start()
 
 # Variáveis globais para o Bully Algorithm
 sensor_id = None        # Ex: "sensor_5000"
@@ -184,8 +252,6 @@ def anuncia_coordenador():
         except Exception as e:
             print(f"[Bully] Erro ao anunciar para {s_id}: {e}")
 
-# --- Fim da implementação do Bully ---
-
 def main(porta=5000):
     global sensor_id, election_in_progress
     # Define o sensor_id baseado na porta
@@ -210,7 +276,10 @@ def main(porta=5000):
     servidor.bind(("0.0.0.0", porta))
     servidor.listen(1)
     print(f"[Sensor {sensor_id}] Servidor TCP iniciado na porta {porta}")
-    
+
+    # Inicia o servidor que escuta por marcadores do cliente
+    inicia_marker_listener(porta)
+
     # Opcional: após a inicialização, se este sensor for o de maior id conhecido, pode se declarar coordenador
     # (ou aguardar um timeout para disparar a eleição)
     threading.Timer(5, inicia_eleicao).start()

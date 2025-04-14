@@ -4,6 +4,8 @@ services:
     build: .
     container_name: sensor1
     command: ["python", "-u", "src/sensor/sensor.py", "5000"]
+    volumes:
+      - ./src/sensor/snapshots:/app/src/sensor/snapshots
     ports:
       - "5000:5000"
 
@@ -11,6 +13,8 @@ services:
     build: .
     container_name: sensor2
     command: ["python", "-u", "src/sensor/sensor.py", "5001"]
+    volumes:
+      - ./src/sensor/snapshots:/app/src/sensor/snapshots
     ports:
       - "5001:5001"
 
@@ -18,6 +22,8 @@ services:
     build: .
     container_name: sensor3
     command: ["python", "-u", "src/sensor/sensor.py", "5002"]
+    volumes:
+      - ./src/sensor/snapshots:/app/src/sensor/snapshots
     ports:
       - "5002:5002"
 
@@ -25,6 +31,8 @@ services:
     build: .
     container_name: client
     command: ["python", "-u", "src/client/client.py"]
+    volumes:
+      - ./src/client/snapshots:/app/src/client/snapshots
     depends_on:
       - sensor1
       - sensor2
