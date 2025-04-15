@@ -44,3 +44,7 @@ services:
     command: ["python", "-u", "src/middleware/monitor_server.py"]
     ports:
       - "50051:50051"
+
+networks:
+  default:
+    driver: bridge

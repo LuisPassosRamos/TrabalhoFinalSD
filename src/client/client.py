@@ -119,19 +119,40 @@ def receber_dados(s, host, porta):
 def conecta_sensor(host, porta):
     """Estabelece conexão com o sensor e chama o método de receber dados."""
     while True:
-
         try:
-            print(f"[Cliente] Conectando a {host}:{porta} ...")
+            print(f"[Cliente] Tentando conectar a {host}:{porta} ...")
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             s.connect((host, porta))
             print(f"[Cliente] Conectado ao sensor {host}:{porta}")
             receber_dados(s, host, porta)
         except Exception as e:
             print(f"[Cliente] Erro ao conectar-se a {host}:{porta}: {e}. Tentando novamente em 5 segundos...")
-            time.sleep(5)
+            time.sleep(5)  # Aguarda 5 segundos antes de tentar novamente
         finally:
-            s.close()
+            try:
+                s.close()
+            except Exception:
+                pass
 
+def enviar_token_para_maior_id(sensores):
+    """
+    Envia o token para o servidor com o maior ID.
+    """
+    # Determina o servidor com o maior ID
+    maior_sensor = max(sensores, key=lambda sensor: sensor["porta"])
+    host = maior_sensor["host"]
+    porta_base = maior_sensor["porta"]
+    token_port = porta_base + 2000  # Porta para o token
+
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.connect((host, token_port))
+        s.sendall("TOKEN".encode())
+        print(f"[Cliente] Token enviado para {host}:{token_port}")
+    except Exception as e:
+        print(f"[Cliente] Erro ao enviar token para {host}:{token_port}: {e}")
+    finally:
+        s.close()
 
 def main():
     # Sensores disponíveis (nomes de host e porta para conexão de dados)
@@ -140,17 +161,22 @@ def main():
         {"host": "sensor2", "porta": 5001},
         {"host": "sensor3", "porta": 5002},
     ]
+
     # Inicia threads para conectar aos sensores e receber dados
     for sensor in sensores:
         t = threading.Thread(target=conecta_sensor, args=(sensor["host"], sensor["porta"]))
         t.daemon = True
         t.start()
-        
+
     # Inicia thread para o snapshot global com envio de marcadores
     t_snapshot = threading.Thread(target=snapshot_global_periodico, args=(sensores,))
     t_snapshot.daemon = True
     t_snapshot.start()
-    
+
+    # Envia o token para o servidor com o maior ID
+    time.sleep(10)  # Aguarda um tempo para garantir que os sensores estejam prontos
+    enviar_token_para_maior_id(sensores)
+
     # Mantém o main vivo
     while True:
         time.sleep(1)
