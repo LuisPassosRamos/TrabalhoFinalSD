@@ -13,6 +13,8 @@ from middleware.protos import bully_pb2
 from middleware.protos import bully_pb2_grpc
 import requests
 import glob
+from cryptography.hazmat.primitives.asymmetric import rsa, padding
+from cryptography.hazmat.primitives import serialization, hashes
 
 SNAPSHOT_DIR = os.path.join(os.path.dirname(__file__), "snapshots")
 if not os.path.exists(SNAPSHOT_DIR):
@@ -247,8 +249,17 @@ def enviar_dados(conn):
 
 def trata_conexao(conn, addr):
     print(f"[Sensor] Conexão estabelecida com o cliente {addr}.")
+    autentica_cliente(conn)
     enviar_dados(conn)
-    
+
+def autentica_cliente(conn):
+    segredo_cifrado = conn.recv(256)
+    segredo = private_key.decrypt(
+        segredo_cifrado,
+        padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA256()), algorithm=hashes.SHA256(), label=None)
+    )
+    conn.sendall(segredo)
+    # Após isso, conexão autenticada!
 
 # --- (Mantém a implementação do Bully aqui, sem alterações) ---
 class BullyServiceServicer(bully_pb2_grpc.BullyServiceServicer):
@@ -324,6 +335,32 @@ def anuncia_coordenador():
         except Exception as e:
             print(f"[Bully] Erro ao anunciar para {s_id}: {e}")
 
+# Geração/carregamento das chaves do sensor
+def load_or_generate_keys():
+    priv_path = os.path.join(os.path.dirname(__file__), "sensor_private.pem")
+    pub_path = os.path.join(os.path.dirname(__file__), "sensor_public.pem")
+    if os.path.exists(priv_path):
+        with open(priv_path, "rb") as f:
+            private_key = serialization.load_pem_private_key(f.read(), password=None)
+    else:
+        private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        with open(priv_path, "wb") as f:
+            f.write(private_key.private_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PrivateFormat.PKCS8,
+                encryption_algorithm=serialization.NoEncryption()
+            ))
+        with open(pub_path, "wb") as f:
+            f.write(private_key.public_key().public_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PublicFormat.SubjectPublicKeyInfo
+            ))
+    return private_key
+
+# No início do sensor.py
+private_key = load_or_generate_keys()
+public_key = private_key.public_key()
+
 # --- Main ---
 def main(porta=5000):
     global sensor_id, election_in_progress
@@ -353,8 +390,9 @@ def main(porta=5000):
 
     # Inicia o servidor TCP para aceitar conexões de clientes
     servidor = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    servidor.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1) 
     servidor.bind(("0.0.0.0", porta))
-    servidor.listen(1)
+    servidor.listen(5)
     print(f"[Sensor] Servidor TCP iniciado na porta {porta}")
 
     # Inicia o servidor que escuta por marcadores do cliente

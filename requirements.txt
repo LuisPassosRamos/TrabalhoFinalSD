@@ -6,3 +6,4 @@ wheel
 flask
 requests
 filelock
+cryptography

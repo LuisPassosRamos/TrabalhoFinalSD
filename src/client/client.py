@@ -6,6 +6,9 @@ import json
 import os
 import requests
 import glob
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import padding
+from cryptography.hazmat.primitives import hashes
 
 # Inicializa o relógio de Lamport e um lock para ele
 relogio_de_lamport = 0
@@ -217,6 +220,25 @@ def restaurar_estado_do_ultimo_snapshot():
         snapshot = json.load(f)
         relogio_de_lamport = snapshot.get("lamport_clock", 0)
     print(f"[Cliente] Estado restaurado do snapshot: {ultimo_snapshot} (Lamport={relogio_de_lamport})")
+
+def load_sensor_public_key(pub_path):
+    with open(pub_path, "rb") as f:
+        return serialization.load_pem_public_key(f.read())
+
+def autentica_com_sensor(sock, sensor_pubkey):
+    segredo = os.urandom(16)
+    segredo_cifrado = sensor_pubkey.encrypt(
+        segredo,
+        padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA256()), algorithm=hashes.SHA256(), label=None)
+    )
+    sock.sendall(segredo_cifrado)
+    resposta = sock.recv(256)
+    if resposta == segredo:
+        print("[Cliente] Sensor autenticado com sucesso!")
+        return True
+    else:
+        print("[Cliente] Falha na autenticação do sensor.")
+        return False
 
 def main():
     restaurar_estado_do_ultimo_snapshot()
