@@ -49,6 +49,15 @@ services:
     ports:
       - "50051:50051"
 
+  cloud:
+    build: .
+    container_name: cloud
+    command: ["python", "-u", "src/cloud/cloud_server.py"]
+    volumes:
+      - ./src/cloud:/app/src/cloud
+    ports:
+      - "6000:6000"
+
 networks:
   default:
     driver: bridge

@@ -7,12 +7,11 @@ import random
 import sys
 import grpc
 from concurrent import futures
-
 from middleware.protos import sensor_status_pb2
 from middleware.protos import sensor_status_pb2_grpc
 from middleware.protos import bully_pb2
 from middleware.protos import bully_pb2_grpc
-
+import requests
 
 SNAPSHOT_DIR = os.path.join(os.path.dirname(__file__), "snapshots")
 if not os.path.exists(SNAPSHOT_DIR):
@@ -45,6 +44,13 @@ def registrar_mensagem_log(sensor_id, sender_id, mensagem):
         f.seek(0)
         json.dump(logs, f, indent=4)
         f.truncate()  # <-- ESSA LINHA É FUNDAMENTAL
+    replica_para_cloud(log_entry)
+
+def replica_para_cloud(log_entry):
+    try:
+        requests.post("http://cloud:6000/replica", json=log_entry, timeout=2)
+    except Exception as e:
+        print(f"[Cloud] Falha ao replicar para nuvem: {e}")
 
 def criar_snapshot_local_sensor():
     snapshot = {

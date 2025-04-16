@@ -4,6 +4,7 @@ import threading
 import time
 import json
 import os
+import requests
 
 # Inicializa o relógio de Lamport e um lock para ele
 relogio_de_lamport = 0
@@ -66,6 +67,9 @@ def registrar_mensagem(id, mensagem):
         f.seek(0)
         json.dump(logs, f, indent=4)
         f.truncate()  # <-- ESSA LINHA É FUNDAMENTAL
+
+    # Replica para a nuvem
+    replica_para_cloud(log_entry)
 
 def enviar_mensagens(sensores):
     """
@@ -194,6 +198,12 @@ def enviar_token_para_maior_id(sensores):
         print(f"[Cliente] Erro ao enviar token para {host}:{token_port}: {e}")
     finally:
         s.close()
+
+def replica_para_cloud(log_entry):
+    try:
+        requests.post("http://cloud:6000/replica", json=log_entry, timeout=2)
+    except Exception as e:
+        print(f"[Cloud] Falha ao replicar para nuvem: {e}")
 
 def main():
     # Sensores disponíveis (nomes de host e porta para conexão de dados)
