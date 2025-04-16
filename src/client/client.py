@@ -5,6 +5,7 @@ import time
 import json
 import os
 import requests
+import glob
 
 # Inicializa o relógio de Lamport e um lock para ele
 relogio_de_lamport = 0
@@ -205,7 +206,20 @@ def replica_para_cloud(log_entry):
     except Exception as e:
         print(f"[Cloud] Falha ao replicar para nuvem: {e}")
 
+def restaurar_estado_do_ultimo_snapshot():
+    global relogio_de_lamport
+    arquivos = glob.glob(os.path.join(SNAPSHOT_DIR, "snapshot_cliente_*.json"))
+    if not arquivos:
+        print("[Cliente] Nenhum snapshot encontrado para restaurar.")
+        return
+    ultimo_snapshot = max(arquivos, key=os.path.getmtime)
+    with open(ultimo_snapshot, "r") as f:
+        snapshot = json.load(f)
+        relogio_de_lamport = snapshot.get("lamport_clock", 0)
+    print(f"[Cliente] Estado restaurado do snapshot: {ultimo_snapshot} (Lamport={relogio_de_lamport})")
+
 def main():
+    restaurar_estado_do_ultimo_snapshot()
     # Sensores disponíveis (nomes de host e porta para conexão de dados)
     sensores = [
         {"host": "sensor1", "porta": 5000},

@@ -12,6 +12,7 @@ from middleware.protos import sensor_status_pb2_grpc
 from middleware.protos import bully_pb2
 from middleware.protos import bully_pb2_grpc
 import requests
+import glob
 
 SNAPSHOT_DIR = os.path.join(os.path.dirname(__file__), "snapshots")
 if not os.path.exists(SNAPSHOT_DIR):
@@ -62,6 +63,18 @@ def criar_snapshot_local_sensor():
     with open(nome_arquivo, "w") as f:
         json.dump(snapshot, f, indent=4)
     print(f"[Sensor] Snapshot criado: {nome_arquivo}")
+
+def restaurar_estado_do_ultimo_snapshot():
+    global relogio_de_lamport
+    arquivos = glob.glob(os.path.join(SNAPSHOT_DIR, f"snapshot_{sensor_id}_*.json"))
+    if not arquivos:
+        print("[Sensor] Nenhum snapshot encontrado para restaurar.")
+        return
+    ultimo_snapshot = max(arquivos, key=os.path.getmtime)
+    with open(ultimo_snapshot, "r") as f:
+        snapshot = json.load(f)
+        relogio_de_lamport = snapshot.get("lamport_clock", 0)
+    print(f"[Sensor] Estado restaurado do snapshot: {ultimo_snapshot} (Lamport={relogio_de_lamport})")
 
 # --- Marker Listener (já implementado) ---
 def marker_listener(marker_port):
@@ -316,6 +329,8 @@ def main(porta=5000):
     global sensor_id, election_in_progress
     sensor_id = f"sensor_{porta}"
     election_in_progress = False
+
+    restaurar_estado_do_ultimo_snapshot()
 
     # Inicializa o log ao iniciar o sensor
     inicializa_log(sensor_id)
