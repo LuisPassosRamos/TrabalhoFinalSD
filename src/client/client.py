@@ -1,4 +1,15 @@
-# src/client/client.py
+"""
+Módulo principal do Cliente do sistema SISD.
+
+Responsabilidades:
+- Conectar-se aos sensores via TCP e receber dados climáticos.
+- Orquestrar snapshots globais e enviar marcadores para os sensores.
+- Implementar checkpoint/rollback (snapshots) para tolerância a falhas.
+- Replicar logs para o serviço cloud.
+- Participar do Token Ring (envio inicial do token).
+- Autenticar sensores usando criptografia assimétrica (RSA).
+"""
+
 import socket
 import threading
 import time
@@ -14,7 +25,7 @@ from cryptography.hazmat.primitives import hashes
 relogio_de_lamport = 0
 relogio_lock = threading.Lock()
 
-# Pasta onde os snapshots do cliente serão armazenados
+# Diretórios para snapshots e logs
 SNAPSHOT_DIR = os.path.join(os.path.dirname(__file__), "snapshots")
 if not os.path.exists(SNAPSHOT_DIR):
     os.makedirs(SNAPSHOT_DIR)
@@ -31,11 +42,7 @@ if not os.path.exists(LOG_FILE):
 
 def criar_snapshot_local():
     """
-    Cria um snapshot do estado atual do cliente e salva em JSON.
-    O snapshot inclui:
-      - Identificador (neste caso "cliente")
-      - Timestamp atual (time.time())
-      - Valor do relógio de Lamport
+    Cria um snapshot do estado atual do cliente.
     """
     snapshot = {
         "id": "cliente",
@@ -49,9 +56,7 @@ def criar_snapshot_local():
 
 def registrar_mensagem(id, mensagem):
     """
-    Registra uma mensagem no arquivo JSON de replicação de dados.
-    :param id: Identificador do sensor ou cliente.
-    :param mensagem: Mensagem a ser registrada.
+    Registra uma mensagem no log local e replica para a nuvem.
     """
     log_entry = {
         "id": id,
@@ -77,12 +82,7 @@ def registrar_mensagem(id, mensagem):
 
 def enviar_mensagens(sensores):
     """
-    Envia um marcador para cada sensor. O marcador pode ser uma mensagem simples indicando
-    que o sensor deve efetuar um snapshot. Antes de enviar, incrementa o relógio de Lamport.
-    Cada sensor deverá estar escutando em uma porta específica para os marcadores (por exemplo, porta + 1000).
-    
-    :param sensores: lista de dicionários, e.g.,
-       [{"host": "sensor1", "porta": 5000}, ...]
+    Envia marcadores de snapshot para todos os sensores.
     """
     novo_clock = incrementa_relogio_de_lamport()
     marcador = f"MARKER|{novo_clock}"
@@ -108,7 +108,9 @@ def enviar_mensagens(sensores):
             s.close()
 
 def snapshot_global_periodico(sensores):
-    """Função que a cada 10 segundos cria um snapshot global e envia marcadores para os sensores."""
+    """
+    Periodicamente cria snapshot local e envia marcadores para os sensores.
+    """
     while True:
         # Cria o snapshot local do cliente
         criar_snapshot_local()
@@ -116,16 +118,19 @@ def snapshot_global_periodico(sensores):
         enviar_mensagens(sensores)
         time.sleep(10)
 
-
 def atualizar_relogio_de_lamport(timestamp_recebido):
-    """Atualiza o relógio de Lamport com base no timestamp recebido."""
+    """
+    Atualiza o relógio de Lamport com base em timestamp recebido.
+    """
     global relogio_de_lamport
     with relogio_lock:
         relogio_de_lamport = max(relogio_de_lamport, timestamp_recebido) + 1
         print(f"[Cliente] Atualizado relógio de Lamport: {relogio_de_lamport}")
 
 def incrementa_relogio_de_lamport():
-    """Incrementa o relógio de Lamport se não houver timestamp recebido."""
+    """
+    Incrementa o relógio de Lamport.
+    """
     global relogio_de_lamport
     with relogio_lock:
         relogio_de_lamport += 1
@@ -133,8 +138,8 @@ def incrementa_relogio_de_lamport():
         return relogio_de_lamport
 
 def receber_dados(s, host, porta):
-    """Recebe dados do sensor enquanto a conexão estiver ativa.
-       Espera que os dados sejam enviados no formato: <dados>|<timestamp>
+    """
+    Recebe dados do sensor enquanto a conexão estiver ativa.
     """
     try:
         while True:
@@ -164,7 +169,9 @@ def receber_dados(s, host, porta):
         print(f"[Cliente] Erro ao receber dados de {host}:{porta}: {e}")
 
 def conecta_sensor(host, porta):
-    """Estabelece conexão com o sensor e chama o método de receber dados."""
+    """
+    Estabelece conexão com o sensor e chama o método de receber dados.
+    """
     while True:
         try:
             print(f"[Cliente] Tentando conectar a {host}:{porta} ...")
@@ -183,7 +190,7 @@ def conecta_sensor(host, porta):
 
 def enviar_token_para_maior_id(sensores):
     """
-    Envia o token para o servidor com o maior ID.
+    Envia o token para o sensor com maior ID (porta).
     """
     # Determina o servidor com o maior ID
     maior_sensor = max(sensores, key=lambda sensor: sensor["porta"])
@@ -204,12 +211,18 @@ def enviar_token_para_maior_id(sensores):
         s.close()
 
 def replica_para_cloud(log_entry):
+    """
+    Replica uma entrada de log para o serviço cloud.
+    """
     try:
         requests.post("http://cloud:6000/replica", json=log_entry, timeout=2)
     except Exception as e:
         print(f"[Cloud] Falha ao replicar para nuvem: {e}")
 
 def restaurar_estado_do_ultimo_snapshot():
+    """
+    Restaura o estado do cliente a partir do último snapshot salvo.
+    """
     global relogio_de_lamport
     arquivos = glob.glob(os.path.join(SNAPSHOT_DIR, "snapshot_cliente_*.json"))
     if not arquivos:
@@ -222,10 +235,16 @@ def restaurar_estado_do_ultimo_snapshot():
     print(f"[Cliente] Estado restaurado do snapshot: {ultimo_snapshot} (Lamport={relogio_de_lamport})")
 
 def load_sensor_public_key(pub_path):
+    """
+    Carrega a chave pública do sensor.
+    """
     with open(pub_path, "rb") as f:
         return serialization.load_pem_public_key(f.read())
 
 def autentica_com_sensor(sock, sensor_pubkey):
+    """
+    Autentica o sensor usando criptografia assimétrica.
+    """
     segredo = os.urandom(16)
     segredo_cifrado = sensor_pubkey.encrypt(
         segredo,
@@ -241,6 +260,9 @@ def autentica_com_sensor(sock, sensor_pubkey):
         return False
 
 def main():
+    """
+    Função principal do cliente: inicializa threads, conexões e snapshots.
+    """
     restaurar_estado_do_ultimo_snapshot()
     # Sensores disponíveis (nomes de host e porta para conexão de dados)
     sensores = [
@@ -269,4 +291,5 @@ def main():
         time.sleep(1)
 
 if __name__ == "__main__":
+    # Ponto de entrada do cliente
     main()

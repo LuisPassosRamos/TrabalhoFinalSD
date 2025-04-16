@@ -1,4 +1,12 @@
-# src/middleware/monitor_server.py
+"""
+Servidor Monitor do SISD.
+
+Responsabilidades:
+- Receber status/heartbeat dos sensores via gRPC.
+- Detectar falhas de sensores (timeout).
+- Exibir status e falhas detectadas.
+"""
+
 import time
 from concurrent import futures
 import grpc
@@ -10,6 +18,9 @@ from middleware.protos import sensor_status_pb2_grpc
 sensors_status = {}  # { sensor_id: timestamp }
 
 class MonitorServiceServicer(sensor_status_pb2_grpc.MonitorServiceServicer):
+    """
+    Serviço gRPC para receber status dos sensores.
+    """
     def SendStatus(self, request, context):
         sensor_id = request.sensor_id
         sensors_status[sensor_id] = time.time()
@@ -17,7 +28,9 @@ class MonitorServiceServicer(sensor_status_pb2_grpc.MonitorServiceServicer):
         return sensor_status_pb2.Ack(mensagem="Status recebido")
 
 def monitor_failure_checker():
-    """Thread que verifica falhas dos sensores se não houver status em 20 segundos."""
+    """
+    Thread que verifica falhas dos sensores se não houver status em 20 segundos.
+    """
     while True:
         agora = time.time()
         for sensor_id, ultimo in sensors_status.items():
@@ -26,6 +39,9 @@ def monitor_failure_checker():
         time.sleep(5)
 
 def serve():
+    """
+    Inicializa o servidor gRPC do monitor e a thread de verificação de falhas.
+    """
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
     sensor_status_pb2_grpc.add_MonitorServiceServicer_to_server(MonitorServiceServicer(), server)
     server.add_insecure_port('[::]:50051')
@@ -39,4 +55,5 @@ def serve():
     server.wait_for_termination()
 
 if __name__ == '__main__':
+    # Ponto de entrada do monitor
     serve()

@@ -1,10 +1,16 @@
-# src/multicast/sensor_alert.py
+"""
+Módulo de envio de alertas climáticos via UDP Multicast.
+
+Responsabilidades:
+- Enviar mensagens de alerta para um grupo multicast.
+- Simular detecção de clima extremo.
+"""
 
 import socket
 import struct
 import time
 
-# Endereço multicast e porta (escolha um IP válido para multicast, por exemplo, entre 224.0.0.0 e 239.255.255.255)
+# Endereço multicast e porta
 MCAST_GRP = '224.1.1.1'
 MCAST_PORT = 5007
 
@@ -26,7 +32,6 @@ def enviar_alerta(mensagem):
 def main():
     """
     Simula a detecção de clima extremo e envia alertas periodicamente.
-    Você pode modificar esse comportamento para detectar condições climáticas reais.
     """
     while True:
         # Para exemplo, envia um alerta a cada 30 segundos
@@ -35,4 +40,5 @@ def main():
         time.sleep(30)
 
 if __name__ == "__main__":
+    # Ponto de entrada do alerta multicast
     main()

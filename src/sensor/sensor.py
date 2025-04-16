@@ -1,3 +1,16 @@
+"""
+Módulo principal do Sensor do sistema distribuído SISD.
+
+Responsabilidades:
+- Simulação de dados climáticos e envio ao cliente via TCP.
+- Implementação de checkpoint/rollback (snapshots) para tolerância a falhas.
+- Replicação de logs para o serviço cloud.
+- Exclusão mútua via Token Ring.
+- Eleição de coordenador via algoritmo Bully (gRPC).
+- Envio de status (heartbeat) ao monitor via gRPC.
+- Autenticação do cliente usando criptografia assimétrica (RSA).
+"""
+
 import socket
 import threading
 import time
@@ -16,6 +29,7 @@ import glob
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import serialization, hashes
 
+# Diretórios para snapshots e logs
 SNAPSHOT_DIR = os.path.join(os.path.dirname(__file__), "snapshots")
 if not os.path.exists(SNAPSHOT_DIR):
     os.makedirs(SNAPSHOT_DIR)
@@ -23,6 +37,9 @@ if not os.path.exists(SNAPSHOT_DIR):
 LOG_DIR = os.path.join(os.path.dirname(__file__), "logs")
 
 def inicializa_log(sensor_id):
+    """
+    Inicializa o arquivo de log do sensor.
+    """
     if not os.path.exists(LOG_DIR):
         os.makedirs(LOG_DIR)
     log_file = os.path.join(LOG_DIR, f"{sensor_id}_log.json")
@@ -32,6 +49,9 @@ def inicializa_log(sensor_id):
     return log_file
 
 def registrar_mensagem_log(sensor_id, sender_id, mensagem):
+    """
+    Registra uma mensagem no log local e replica para a nuvem.
+    """
     log_file = os.path.join(LOG_DIR, f"{sensor_id}_log.json")
     log_entry = {
         "id": sender_id,
@@ -50,12 +70,18 @@ def registrar_mensagem_log(sensor_id, sender_id, mensagem):
     replica_para_cloud(log_entry)
 
 def replica_para_cloud(log_entry):
+    """
+    Replica uma entrada de log para o serviço cloud.
+    """
     try:
         requests.post("http://cloud:6000/replica", json=log_entry, timeout=2)
     except Exception as e:
         print(f"[Cloud] Falha ao replicar para nuvem: {e}")
 
 def criar_snapshot_local_sensor():
+    """
+    Cria um snapshot do estado atual do sensor.
+    """
     snapshot = {
         "id": sensor_id,
         "timestamp": time.time(),
@@ -67,6 +93,9 @@ def criar_snapshot_local_sensor():
     print(f"[Sensor] Snapshot criado: {nome_arquivo}")
 
 def restaurar_estado_do_ultimo_snapshot():
+    """
+    Restaura o estado do sensor a partir do último snapshot salvo.
+    """
     global relogio_de_lamport
     arquivos = glob.glob(os.path.join(SNAPSHOT_DIR, f"snapshot_{sensor_id}_*.json"))
     if not arquivos:
@@ -78,8 +107,11 @@ def restaurar_estado_do_ultimo_snapshot():
         relogio_de_lamport = snapshot.get("lamport_clock", 0)
     print(f"[Sensor] Estado restaurado do snapshot: {ultimo_snapshot} (Lamport={relogio_de_lamport})")
 
-# --- Marker Listener (já implementado) ---
+# --- Marker Listener (para snapshots globais) ---
 def marker_listener(marker_port):
+    """
+    Escuta por marcadores enviados pelo cliente para iniciar snapshots.
+    """
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server.bind(("0.0.0.0", marker_port))
     server.listen(5)
@@ -107,18 +139,20 @@ def marker_listener(marker_port):
             conn.close()
 
 def inicia_marker_listener(porta_base):
+    """
+    Inicia a thread que escuta por marcadores de snapshot.
+    """
     marker_port = porta_base + 1000
     t = threading.Thread(target=marker_listener, args=(marker_port,))
     t.daemon = True
     t.start()
 
 # --- Token Ring para exclusão mútua distribuída ---
-has_token = False  # Global: se este nó possui o token
+has_token = False  # Indica se este nó possui o token
 
 def start_token_listener(token_port):
     """
-    Thread que escuta, via socket TCP, a chegada do token.
-    Quando o token é recebido, define a flag has_token como True.
+    Thread que escuta a chegada do token via TCP.
     """
     global has_token
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -134,6 +168,9 @@ def start_token_listener(token_port):
         conn.close()
 
 def inicia_token_listener(porta_base):
+    """
+    Inicia a thread que escuta o token.
+    """
     token_port = porta_base + 2000
     t = threading.Thread(target=start_token_listener, args=(token_port,))
     t.daemon = True
@@ -141,8 +178,7 @@ def inicia_token_listener(porta_base):
 
 def get_next_sensor():
     """
-    Determina o próximo sensor no anel (utilizando a ordem dos ids).
-    Supõe que 'sensores_conhecidos' seja um dicionário onde a chave tem o formato "sensor_<porta>".
+    Determina o próximo sensor no anel lógico para passagem do token.
     """
     sensor_ids = sorted(sensores_conhecidos.keys())
     idx = sensor_ids.index(sensor_id)
@@ -177,12 +213,13 @@ def pass_token():
         s.close()
         has_token = False
 
-# --- Variáveis e funções já existentes para Bully e status ---
+# --- Variáveis e funções para Bully e status ---
 sensor_id = None        
 is_coordinator = False  
 coordinator_id = None   
 election_in_progress = False
 
+# Dicionário de sensores conhecidos (id: (host, porta_bully))
 sensores_conhecidos = {
     "sensor_5000": ("sensor1", 5001),
     "sensor_5001": ("sensor2", 5002),
@@ -193,6 +230,9 @@ relogio_de_lamport = 0
 lamport_lock = threading.Lock()
 
 def incrementa_relogio_de_lamport():
+    """
+    Incrementa o relógio lógico de Lamport.
+    """
     global relogio_de_lamport
     with lamport_lock:
         relogio_de_lamport += 1
@@ -200,6 +240,9 @@ def incrementa_relogio_de_lamport():
         return relogio_de_lamport
 
 def envia_status_para_monitor(sensor_id, monitor_host="monitor", monitor_port=50051):
+    """
+    Envia periodicamente status do sensor ao monitor via gRPC.
+    """
     channel = grpc.insecure_channel(f"{monitor_host}:{monitor_port}")
     stub = sensor_status_pb2_grpc.MonitorServiceStub(channel)
     while True:
@@ -215,6 +258,9 @@ def envia_status_para_monitor(sensor_id, monitor_host="monitor", monitor_port=50
         time.sleep(10)
 
 def simula_dados():
+    """
+    Simula dados climáticos (temperatura, umidade, pressão).
+    """
     temperatura = round(random.uniform(15.0, 35.0), 1)
     umidade = round(random.uniform(30.0, 80.0), 1)
     pressao = round(random.uniform(990.0, 1020.0), 1)
@@ -222,8 +268,8 @@ def simula_dados():
 
 def enviar_dados(conn):
     """
-    Esse método envia dados para o cliente somente se o sensor tiver o token.
-    Após enviar sua mensagem, o sensor passa o token para o próximo nó.
+    Envia dados ao cliente apenas se possuir o token.
+    Após enviar, passa o token ao próximo sensor.
     """
     global has_token
     try:
@@ -248,11 +294,17 @@ def enviar_dados(conn):
         conn.close()
 
 def trata_conexao(conn, addr):
+    """
+    Trata uma nova conexão TCP do cliente.
+    """
     print(f"[Sensor] Conexão estabelecida com o cliente {addr}.")
     autentica_cliente(conn)
     enviar_dados(conn)
 
 def autentica_cliente(conn):
+    """
+    Autentica o cliente usando criptografia assimétrica.
+    """
     segredo_cifrado = conn.recv(256)
     segredo = private_key.decrypt(
         segredo_cifrado,
@@ -261,8 +313,11 @@ def autentica_cliente(conn):
     conn.sendall(segredo)
     # Após isso, conexão autenticada!
 
-# --- (Mantém a implementação do Bully aqui, sem alterações) ---
+# --- Implementação do algoritmo Bully via gRPC ---
 class BullyServiceServicer(bully_pb2_grpc.BullyServiceServicer):
+    """
+    Serviço gRPC para eleição Bully.
+    """
     def StartElection(self, request, context):
         global election_in_progress
         caller_id = request.sensor_id
@@ -285,6 +340,9 @@ class BullyServiceServicer(bully_pb2_grpc.BullyServiceServicer):
         return bully_pb2.ElectionResponse(ok=True, message="Coordenador recebido")
 
 def inicia_bully_server(bully_port):
+    """
+    Inicia o servidor gRPC para o algoritmo Bully.
+    """
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=5))
     bully_pb2_grpc.add_BullyServiceServicer_to_server(BullyServiceServicer(), server)
     server.add_insecure_port(f"0.0.0.0:{bully_port}")
@@ -293,6 +351,9 @@ def inicia_bully_server(bully_port):
     server.wait_for_termination()
 
 def inicia_eleicao():
+    """
+    Inicia o processo de eleição Bully.
+    """
     global election_in_progress, is_coordinator, coordinator_id
     print(f"[Bully] {sensor_id} iniciando eleição...")
     recebeu_ok = False
@@ -322,6 +383,9 @@ def inicia_eleicao():
     election_in_progress = False
 
 def anuncia_coordenador():
+    """
+    Anuncia o novo coordenador para os demais sensores.
+    """
     for s_id, (host, bully_port) in sensores_conhecidos.items():
         if s_id == sensor_id:
             continue
@@ -335,8 +399,11 @@ def anuncia_coordenador():
         except Exception as e:
             print(f"[Bully] Erro ao anunciar para {s_id}: {e}")
 
-# Geração/carregamento das chaves do sensor
+# --- Geração/carregamento das chaves RSA do sensor ---
 def load_or_generate_keys():
+    """
+    Gera ou carrega as chaves RSA do sensor.
+    """
     priv_path = os.path.join(os.path.dirname(__file__), "sensor_private.pem")
     pub_path = os.path.join(os.path.dirname(__file__), "sensor_public.pem")
     if os.path.exists(priv_path):
@@ -357,12 +424,15 @@ def load_or_generate_keys():
             ))
     return private_key
 
-# No início do sensor.py
+# Carrega as chaves ao iniciar o módulo
 private_key = load_or_generate_keys()
 public_key = private_key.public_key()
 
 # --- Main ---
 def main(porta=5000):
+    """
+    Função principal do sensor: inicializa módulos, threads e servidores.
+    """
     global sensor_id, election_in_progress
     sensor_id = f"sensor_{porta}"
     election_in_progress = False
@@ -405,5 +475,6 @@ def main(porta=5000):
         thread.start()
 
 if __name__ == "__main__":
+    # Ponto de entrada do sensor
     porta = int(sys.argv[1]) if len(sys.argv) > 1 else 5000
     main(porta)

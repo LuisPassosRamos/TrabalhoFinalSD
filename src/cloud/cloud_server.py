@@ -1,3 +1,12 @@
+"""
+Servidor Cloud do SISD.
+
+Responsabilidades:
+- Receber e armazenar réplicas de logs/snapshots enviados por sensores e cliente.
+- Disponibilizar os logs via API REST (GET).
+- Concorrência garantida via filelock.
+"""
+
 from flask import Flask, request, jsonify
 import json
 import os
@@ -14,6 +23,9 @@ if not os.path.exists(DB_FILE):
 
 @app.route("/replica", methods=["POST"])
 def replica():
+    """
+    Endpoint para receber réplicas de logs/snapshots.
+    """
     data = request.json
     try:
         with FileLock(LOCK_FILE):
@@ -32,9 +44,13 @@ def replica():
 
 @app.route("/replica", methods=["GET"])
 def get_replica():
+    """
+    Endpoint para consultar todos os logs/snapshots armazenados.
+    """
     with open(DB_FILE) as f:
         logs = json.load(f)
     return jsonify(logs)
 
 if __name__ == "__main__":
+    # Ponto de entrada do servidor cloud
     app.run(host="0.0.0.0", port=6000)
