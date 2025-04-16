@@ -6,6 +6,7 @@ services:
     command: ["python", "-u", "src/sensor/sensor.py", "5000"]
     volumes:
       - ./src/sensor/snapshots:/app/src/sensor/snapshots
+      - ./src/sensor/logs:/app/src/sensor/logs
     ports:
       - "5000:5000"
 
@@ -15,6 +16,7 @@ services:
     command: ["python", "-u", "src/sensor/sensor.py", "5001"]
     volumes:
       - ./src/sensor/snapshots:/app/src/sensor/snapshots
+      - ./src/sensor/logs:/app/src/sensor/logs
     ports:
       - "5001:5001"
 
@@ -24,6 +26,7 @@ services:
     command: ["python", "-u", "src/sensor/sensor.py", "5002"]
     volumes:
       - ./src/sensor/snapshots:/app/src/sensor/snapshots
+      - ./src/sensor/logs:/app/src/sensor/logs
     ports:
       - "5002:5002"
 
@@ -33,6 +36,7 @@ services:
     command: ["python", "-u", "src/client/client.py"]
     volumes:
       - ./src/client/snapshots:/app/src/client/snapshots
+      - ./src/client/logs:/app/src/client/logs
     depends_on:
       - sensor1
       - sensor2

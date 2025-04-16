@@ -14,6 +14,16 @@ SNAPSHOT_DIR = os.path.join(os.path.dirname(__file__), "snapshots")
 if not os.path.exists(SNAPSHOT_DIR):
     os.makedirs(SNAPSHOT_DIR)
 
+LOG_DIR = os.path.join(os.path.dirname(__file__), "logs")
+if not os.path.exists(LOG_DIR):
+    os.makedirs(LOG_DIR)
+
+LOG_FILE = os.path.join(LOG_DIR, "client_log.json")
+# Garante que o arquivo de log existe
+if not os.path.exists(LOG_FILE):
+    with open(LOG_FILE, "w") as f:
+        json.dump([], f, indent=4)
+
 def criar_snapshot_local():
     """
     Cria um snapshot do estado atual do cliente e salva em JSON.
@@ -31,6 +41,31 @@ def criar_snapshot_local():
     with open(nome_arquivo, "w") as f:
         json.dump(snapshot, f, indent=4)
     print(f"[Cliente] Snapshot local criado: {nome_arquivo}")
+
+def registrar_mensagem(id, mensagem):
+    """
+    Registra uma mensagem no arquivo JSON de replicação de dados.
+    :param id: Identificador do sensor ou cliente.
+    :param mensagem: Mensagem a ser registrada.
+    """
+    log_entry = {
+        "id": id,
+        "timestamp": time.time(),
+        "mensagem": mensagem
+    }
+
+    # Se o arquivo não existir, cria um novo com uma lista vazia
+    if not os.path.exists(LOG_FILE):
+        with open(LOG_FILE, "w") as f:
+            json.dump([], f, indent=4)
+
+    # Adiciona a nova entrada ao arquivo
+    with open(LOG_FILE, "r+") as f:
+        logs = json.load(f)
+        logs.append(log_entry)
+        f.seek(0)
+        json.dump(logs, f, indent=4)
+        f.truncate()  # <-- ESSA LINHA É FUNDAMENTAL
 
 def enviar_mensagens(sensores):
     """
@@ -56,8 +91,11 @@ def enviar_mensagens(sensores):
             s.connect((host, porta_marker))
             s.sendall(marcador.encode())
             print(f"[Cliente] Marcador enviado para {host}:{porta_marker}")
+            mensagem = f"[Cliente] Marcador enviado para {host}:{porta_marker}"
+            registrar_mensagem("client", mensagem)
         except Exception as e:
             print(f"[Cliente] Erro ao enviar marcador para {host}:{porta_marker}: {e}")
+
         finally:
             s.close()
 
@@ -108,6 +146,7 @@ def receber_dados(s, host, porta):
                 sensor_timestamp = None
 
             print(f"[Cliente] Dados recebidos de {host}:{porta} -> {dados_climaticos}")
+            registrar_mensagem(f"{host}:{porta}", dados_climaticos)
             
             if sensor_timestamp is not None:
                 atualizar_relogio_de_lamport(sensor_timestamp)
@@ -149,6 +188,8 @@ def enviar_token_para_maior_id(sensores):
         s.connect((host, token_port))
         s.sendall("TOKEN".encode())
         print(f"[Cliente] Token enviado para {host}:{token_port}")
+        mensagem = f"[Cliente] Token enviado para {host}:{token_port}"
+        registrar_mensagem("client", mensagem)
     except Exception as e:
         print(f"[Cliente] Erro ao enviar token para {host}:{token_port}: {e}")
     finally:

@@ -13,10 +13,38 @@ from middleware.protos import sensor_status_pb2_grpc
 from middleware.protos import bully_pb2
 from middleware.protos import bully_pb2_grpc
 
-# --- Diretório dos snapshots (sem alterações) ---
+
 SNAPSHOT_DIR = os.path.join(os.path.dirname(__file__), "snapshots")
 if not os.path.exists(SNAPSHOT_DIR):
     os.makedirs(SNAPSHOT_DIR)
+
+LOG_DIR = os.path.join(os.path.dirname(__file__), "logs")
+
+def inicializa_log(sensor_id):
+    if not os.path.exists(LOG_DIR):
+        os.makedirs(LOG_DIR)
+    log_file = os.path.join(LOG_DIR, f"{sensor_id}_log.json")
+    if not os.path.exists(log_file):
+        with open(log_file, "w") as f:
+            json.dump([], f, indent=4)
+    return log_file
+
+def registrar_mensagem_log(sensor_id, sender_id, mensagem):
+    log_file = os.path.join(LOG_DIR, f"{sensor_id}_log.json")
+    log_entry = {
+        "id": sender_id,
+        "timestamp": time.time(),
+        "mensagem": mensagem
+    }
+    if not os.path.exists(log_file):
+        with open(log_file, "w") as f:
+            json.dump([], f, indent=4)
+    with open(log_file, "r+") as f:
+        logs = json.load(f)
+        logs.append(log_entry)
+        f.seek(0)
+        json.dump(logs, f, indent=4)
+        f.truncate()  # <-- ESSA LINHA É FUNDAMENTAL
 
 def criar_snapshot_local_sensor():
     snapshot = {
@@ -41,6 +69,7 @@ def marker_listener(marker_port):
             data = conn.recv(1024)
             if data:
                 mensagem = data.decode().strip()
+                registrar_mensagem_log(sensor_id,"client", mensagem)
                 if mensagem.startswith("MARKER"):
                     partes = mensagem.split("|")
                     if len(partes) == 2:
@@ -188,6 +217,7 @@ def enviar_dados(conn):
             mensagem = f"{dados}|{timestamp}"
             conn.sendall(mensagem.encode())
             print(f"[Sensor] Dados enviados: {mensagem}")
+            registrar_mensagem_log(sensor_id, sensor_id,f"[Sensor] Dados enviados: {mensagem}")
             time.sleep(1)
             # Após enviar, passa o token para o próximo sensor
             pass_token()
@@ -280,6 +310,9 @@ def main(porta=5000):
     global sensor_id, election_in_progress
     sensor_id = f"sensor_{porta}"
     election_in_progress = False
+
+    # Inicializa o log ao iniciar o sensor
+    inicializa_log(sensor_id)
 
     # Define a porta para o Bully gRPC (por exemplo, porta + 1)
     bully_port = porta + 1
