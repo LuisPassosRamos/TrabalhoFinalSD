@@ -1,5 +1,7 @@
 # SISD – Sistema Integrado Simulado de Distribuição
 
+> **Contexto para o portfólio:** projeto acadêmico de sistemas distribuídos com sensores climáticos simulados. [Veja o case e as decisões de comunicação](https://luispassosramos.github.io/LuisPortifolio/projetos/sisd/). A execução descrita é local, com Docker; o projeto não possui uma suíte de testes automatizados.
+
 ## 1. Objetivo Geral
 
 Desenvolver um sistema distribuído completo que simule uma plataforma de consulta e monitoramento de sensores climáticos remotos. O sistema demonstra conceitos de sistemas distribuídos, como comunicação via Sockets, gRPC, Multicast, sincronização, replicação, eleição, tolerância a falhas e segurança.
