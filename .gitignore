@@ -1,0 +1,8 @@
+__pycache__/
+.venv/
+.pytest_cache/
+/src/cloud/cloud_db.json*
+/src/client/logs/
+/src/client/snapshots/
+/src/sensor/logs/
+/src/sensor/snapshots/

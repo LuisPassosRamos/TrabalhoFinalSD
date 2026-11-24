@@ -1,6 +1,24 @@
 # SISD – Sistema Integrado Simulado de Distribuição
 
-> **Contexto para o portfólio:** projeto acadêmico de sistemas distribuídos com sensores climáticos simulados. [Veja o case e as decisões de comunicação](https://luispassosramos.github.io/LuisPortifolio/projetos/sisd/). A execução descrita é local, com Docker; o projeto não possui uma suíte de testes automatizados.
+> **Contexto para o portfólio:** projeto acadêmico com sensores climáticos simulados. [Veja o case e as decisões de comunicação](https://luispassosramos.github.io/LuisPortifolio/projetos/sisd/).
+
+## Onde os conceitos aparecem
+
+| Conceito | Implementação |
+| --- | --- |
+| Leituras TCP, eleição Bully e token | [Sensor](src/sensor/sensor.py) e [cliente](src/client/client.py) |
+| Heartbeat por gRPC | [Monitor](src/middleware/monitor_server.py) |
+| Alertas UDP multicast | [Módulo de alertas](src/multicast/sensor_alert.py) |
+| Replicação HTTP concorrente | [API Flask](src/cloud/cloud_server.py) e [testes](tests/test_cloud_replica.py) |
+
+A API de réplica usa um lock de arquivo para coordenar leituras e atualizações. O JSON novo é gravado em um arquivo temporário e só substitui a réplica depois de escrito por completo. Os testes exercitam requisições simultâneas e a preservação do último estado após falha na substituição.
+
+```bash
+python -m pip install flask filelock
+python -m unittest discover -s tests
+```
+
+Para observar sensores, eleição e troca de mensagens entre os serviços, siga a execução com Docker abaixo.
 
 ## 1. Objetivo Geral
 

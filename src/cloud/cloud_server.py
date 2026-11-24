@@ -1,56 +1,74 @@
-"""
-Servidor Cloud do SISD.
+"""API de replicação de logs e snapshots do SISD."""
 
-Responsabilidades:
-- Receber e armazenar réplicas de logs/snapshots enviados por sensores e cliente.
-- Disponibilizar os logs via API REST (GET).
-- Concorrência garantida via filelock.
-"""
-
-from flask import Flask, request, jsonify
 import json
 import os
-from filelock import FileLock
+from pathlib import Path
+from tempfile import NamedTemporaryFile
 
-app = Flask(__name__)
-DB_FILE = os.path.join(os.path.dirname(__file__), "cloud_db.json")
-LOCK_FILE = DB_FILE + ".lock"
+from filelock import FileLock, Timeout
+from flask import Flask, jsonify, request
 
-# Garante que o arquivo existe
-if not os.path.exists(DB_FILE):
-    with open(DB_FILE, "w") as f:
-        json.dump([], f)
 
-@app.route("/replica", methods=["POST"])
-def replica():
-    """
-    Endpoint para receber réplicas de logs/snapshots.
-    """
-    data = request.json
-    try:
-        with FileLock(LOCK_FILE):
-            with open(DB_FILE, "r+") as f:
-                try:
-                    logs = json.load(f)
-                except Exception as e:
-                    return jsonify({"status": "error", "error": f"Erro ao ler o banco de dados: {e}"}), 500
-                logs.append(data)
-                f.seek(0)
-                json.dump(logs, f, indent=4)
-                f.truncate()
-    except Exception as e:
-        return jsonify({"status": "error", "error": str(e)}), 500
-    return jsonify({"status": "ok"})
+def create_app(db_path=None):
+    app = Flask(__name__)
+    replica_path = Path(db_path or Path(__file__).with_name("cloud_db.json"))
+    lock = FileLock(f"{replica_path}.lock", timeout=5)
 
-@app.route("/replica", methods=["GET"])
-def get_replica():
-    """
-    Endpoint para consultar todos os logs/snapshots armazenados.
-    """
-    with open(DB_FILE) as f:
-        logs = json.load(f)
-    return jsonify(logs)
+    def read_replica():
+        try:
+            with replica_path.open(encoding="utf-8") as file:
+                entries = json.load(file)
+        except FileNotFoundError:
+            return []
+        if not isinstance(entries, list):
+            raise ValueError("Formato inválido para a réplica")
+        return entries
+
+    def write_replica(entries):
+        file = NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=replica_path.parent, delete=False
+        )
+        temporary_path = Path(file.name)
+        try:
+            with file:
+                json.dump(entries, file, ensure_ascii=False, indent=2)
+            os.replace(temporary_path, replica_path)
+        finally:
+            temporary_path.unlink(missing_ok=True)
+
+    @app.post("/replica")
+    def replica():
+        entry = request.get_json(silent=True)
+        if not isinstance(entry, dict):
+            return jsonify(status="error", error="Envie um objeto JSON."), 400
+
+        try:
+            with lock:
+                entries = read_replica()
+                entries.append(entry)
+                write_replica(entries)
+        except Timeout:
+            return jsonify(status="error", error="Réplica ocupada. Tente novamente."), 503
+        except (OSError, ValueError):
+            app.logger.exception("Falha ao gravar a réplica")
+            return jsonify(status="error", error="Falha ao gravar a réplica."), 500
+        return jsonify(status="ok")
+
+    @app.get("/replica")
+    def get_replica():
+        try:
+            with lock:
+                return jsonify(read_replica())
+        except Timeout:
+            return jsonify(status="error", error="Réplica ocupada. Tente novamente."), 503
+        except (OSError, ValueError):
+            app.logger.exception("Falha ao ler a réplica")
+            return jsonify(status="error", error="Falha ao ler a réplica."), 500
+
+    return app
+
+
+app = create_app()
 
 if __name__ == "__main__":
-    # Ponto de entrada do servidor cloud
     app.run(host="0.0.0.0", port=6000)
